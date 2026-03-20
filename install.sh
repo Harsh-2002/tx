@@ -52,9 +52,11 @@ add_to_path() {
     done
     # Add to the first rc file that exists (or create it)
     _target="$1"
-    echo "" >> "$_target"
-    echo "# tx" >> "$_target"
-    echo "$_line" >> "$_target"
+    {
+        echo ""
+        echo "# tx"
+        echo "$_line"
+    } >> "$_target"
     info "Added ${BIN} to PATH in ${_target}"
 }
 
@@ -215,9 +217,11 @@ BASH_COMP
 
         # Source completions in .bashrc if not already
         if ! grep -q 'bash-completion/completions/tx' "$HOME/.bashrc" 2>/dev/null; then
-            echo '' >> "$HOME/.bashrc"
-            echo '# tx completions' >> "$HOME/.bashrc"
-            echo '[ -f ~/.local/share/bash-completion/completions/tx ] && . ~/.local/share/bash-completion/completions/tx' >> "$HOME/.bashrc"
+            {
+                echo ''
+                echo '# tx completions'
+                echo '[ -f ~/.local/share/bash-completion/completions/tx ] && . ~/.local/share/bash-completion/completions/tx'
+            } >> "$HOME/.bashrc"
             info "Updated .bashrc with completion config"
         fi
         ;;

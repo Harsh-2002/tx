@@ -1,11 +1,13 @@
 #!/bin/sh
 # tx — a dead-simple tmux wrapper
 # https://github.com/Harsh-2002/tx
+# MIT License
 
 set -e
 
-# --- Helpers ---
+# Helpers
 
+# Check that tmux is available on the system
 ensure_tmux() {
     command -v tmux >/dev/null 2>&1 || {
         echo "tx: tmux is not installed" >&2
@@ -13,29 +15,32 @@ ensure_tmux() {
     }
 }
 
+# Returns 0 if currently inside a tmux session
 in_tmux() {
     [ -n "$TMUX" ]
 }
 
+# Generate a short unique name for unnamed sessions
 auto_name() {
     echo "tx-$(date +%s | tail -c 5)"
 }
 
-# Convert 1-indexed (human) pane number to 0-indexed (tmux)
+# Convert human-friendly 1-indexed pane number to tmux's 0-indexed
 pane_index() {
     echo $(( $1 - 1 ))
 }
 
+# Print an error message and exit
 die() {
     echo "tx: $*" >&2
     exit 1
 }
 
-# --- Session commands ---
+# Session commands
 
+# Smart default: show status, create, attach, or list depending on context
 cmd_default() {
     if in_tmux; then
-        # Show status
         _sess=$(tmux display-message -p '#S')
         _wins=$(tmux list-windows | wc -l | tr -d ' ')
         _panes=$(tmux list-panes | wc -l | tr -d ' ')
@@ -60,6 +65,7 @@ cmd_default() {
     fi
 }
 
+# Create a new session, auto-names if no name given
 cmd_new() {
     _name="${1:-$(auto_name)}"
     if in_tmux; then
@@ -70,10 +76,12 @@ cmd_new() {
     fi
 }
 
+# List all active sessions
 cmd_ls() {
     tmux list-sessions -F '#S (#{session_windows} windows, created #{session_created_string})' 2>/dev/null || echo "No sessions."
 }
 
+# Attach to a session by name, auto-attaches if only one exists
 cmd_attach() {
     if [ -n "$1" ]; then
         tmux attach-session -t "$1" 2>/dev/null || die "session '$1' not found"
@@ -92,11 +100,13 @@ cmd_attach() {
     fi
 }
 
+# Detach from the current session
 cmd_detach() {
     in_tmux || die "not in a tmux session"
     tmux detach-client
 }
 
+# Kill a session by name, or the current one if inside tmux
 cmd_kill() {
     if [ -n "$1" ]; then
         tmux kill-session -t "$1" 2>/dev/null || die "session '$1' not found"
@@ -109,24 +119,21 @@ cmd_kill() {
     fi
 }
 
-# --- Pane commands ---
+# Pane commands
 
+# Split the current pane side-by-side (left/right)
 cmd_split() {
-    if in_tmux; then
-        tmux split-window -h
-    else
-        die "not in tmux — start a session first: tx new"
-    fi
+    in_tmux || die "not in tmux — start a session first: tx new"
+    tmux split-window -h
 }
 
+# Split the current pane top/bottom
 cmd_vsplit() {
-    if in_tmux; then
-        tmux split-window -v
-    else
-        die "not in tmux — start a session first: tx new"
-    fi
+    in_tmux || die "not in tmux — start a session first: tx new"
+    tmux split-window -v
 }
 
+# Switch focus to pane N (1-indexed)
 cmd_pane() {
     [ -n "$1" ] || die "usage: tx pane <number>"
     in_tmux || die "not in tmux"
@@ -134,11 +141,13 @@ cmd_pane() {
     tmux select-pane -t "$_idx" 2>/dev/null || die "pane $1 does not exist"
 }
 
+# Close the current pane
 cmd_close() {
     in_tmux || die "not in tmux"
     tmux kill-pane
 }
 
+# Resize the current pane (left/right/up/down), default 5 cells
 cmd_resize() {
     in_tmux || die "not in tmux"
     _dir="$1"
@@ -152,6 +161,7 @@ cmd_resize() {
     esac
 }
 
+# Swap the current pane with pane N (1-indexed)
 cmd_swap() {
     [ -n "$1" ] || die "usage: tx swap <pane-number>"
     in_tmux || die "not in tmux"
@@ -159,13 +169,15 @@ cmd_swap() {
     tmux swap-pane -t "$_idx" 2>/dev/null || die "pane $1 does not exist"
 }
 
+# Toggle zoom (fullscreen) on the current pane
 cmd_full() {
     in_tmux || die "not in tmux"
     tmux resize-pane -Z
 }
 
-# --- Send command ---
+# Send command to a pane
 
+# Send a shell command to pane N (1-indexed)
 cmd_send() {
     [ -n "$1" ] && [ -n "$2" ] || die "usage: tx send <pane-number> '<command>'"
     _idx=$(pane_index "$1")
@@ -174,20 +186,22 @@ cmd_send() {
     if in_tmux; then
         tmux send-keys -t "$_idx" "$_cmd" Enter
     else
-        # Outside tmux — send to the first session's pane
-        tmux send-keys -t "$_idx" "$_cmd" Enter 2>/dev/null || die "cannot send — no active session or pane $1 not found"
+        tmux send-keys -t "$_idx" "$_cmd" Enter 2>/dev/null || die "cannot send — no active session or pane not found"
     fi
 }
 
-# --- Layout command ---
+# Layout command
 
+# Create N panes with an even layout and optionally run a command in each.
+# Rebalances after each split so any pane count works reliably.
+# If not inside tmux, creates a new session automatically.
 cmd_layout() {
     [ -n "$1" ] || die "usage: tx layout <count> [-v] [grid] [commands...]"
 
     _count="$1"
     shift
 
-    # Validate count is a number
+    # Validate that count is a positive integer
     case "$_count" in
         ''|*[!0-9]*) die "pane count must be a number" ;;
     esac
@@ -195,30 +209,19 @@ cmd_layout() {
 
     _direction="h"
     _layout_type="even"
-    _cmds=""
-    _cmd_count=0
 
-    # Parse remaining args
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -v)
-                _direction="v"
-                shift
-                ;;
-            grid)
-                _layout_type="grid"
-                shift
-                ;;
-            *)
-                # Collect commands
-                _cmd_count=$(( _cmd_count + 1 ))
-                eval "_cmd_${_cmd_count}=\"\$1\""
-                shift
-                ;;
+    # Separate flags (-v, grid) from command strings
+    _new_args=""
+    for _arg in "$@"; do
+        case "$_arg" in
+            -v)   _direction="v" ;;
+            grid) _layout_type="grid" ;;
+            *)    _new_args="${_new_args} \"$(echo "$_arg" | sed 's/"/\\"/g')\"" ;;
         esac
     done
+    eval "set -- $_new_args"
 
-    # Determine the tmux layout name
+    # Map flags to tmux layout name
     if [ "$_layout_type" = "grid" ]; then
         _tmux_layout="tiled"
     elif [ "$_direction" = "v" ]; then
@@ -227,62 +230,58 @@ cmd_layout() {
         _tmux_layout="even-horizontal"
     fi
 
-    # If not in tmux, create a session first
+    # Determine split direction flag
+    if [ "$_direction" = "v" ] && [ "$_layout_type" = "even" ]; then
+        _split_flag="-v"
+    else
+        _split_flag="-h"
+    fi
+
     if ! in_tmux; then
+        # Outside tmux: create a session, set up panes, then attach
         _sess="layout-$(date +%s | tail -c 5)"
         tmux new-session -d -s "$_sess"
 
-        # Create N-1 additional panes, rebalancing after each split
+        # Create N-1 panes, rebalancing after each split
         _i=1
         while [ "$_i" -lt "$_count" ]; do
-            if [ "$_direction" = "v" ] && [ "$_layout_type" = "even" ]; then
-                tmux split-window -v -t "$_sess"
-            else
-                tmux split-window -h -t "$_sess"
-            fi
+            tmux split-window "$_split_flag" -t "$_sess"
             tmux select-layout -t "$_sess" "$_tmux_layout"
             _i=$(( _i + 1 ))
         done
 
-        # Send commands if provided
-        _i=1
-        while [ "$_i" -le "$_cmd_count" ]; do
-            eval "_c=\$_cmd_${_i}"
-            _pane_idx=$(( _i - 1 ))
+        # Send each command to its corresponding pane
+        _pane_idx=0
+        for _c in "$@"; do
             tmux send-keys -t "${_sess}:0.${_pane_idx}" "$_c" Enter
-            _i=$(( _i + 1 ))
+            _pane_idx=$(( _pane_idx + 1 ))
         done
 
         tmux attach-session -t "$_sess"
     else
-        # Already in tmux — create panes in current window, rebalancing after each split
+        # Inside tmux: create panes in the current window
         _i=1
         while [ "$_i" -lt "$_count" ]; do
-            if [ "$_direction" = "v" ] && [ "$_layout_type" = "even" ]; then
-                tmux split-window -v
-            else
-                tmux split-window -h
-            fi
+            tmux split-window "$_split_flag"
             tmux select-layout "$_tmux_layout"
             _i=$(( _i + 1 ))
         done
 
-        # Send commands if provided
-        _i=1
-        while [ "$_i" -le "$_cmd_count" ]; do
-            eval "_c=\$_cmd_${_i}"
-            _pane_idx=$(( _i - 1 ))
+        # Send each command to its corresponding pane
+        _pane_idx=0
+        for _c in "$@"; do
             tmux send-keys -t "$_pane_idx" "$_c" Enter
-            _i=$(( _i + 1 ))
+            _pane_idx=$(( _pane_idx + 1 ))
         done
 
-        # Select first pane
+        # Return focus to the first pane
         tmux select-pane -t 0
     fi
 }
 
-# --- Window commands ---
+# Window commands
 
+# Create a new window, optionally with a name
 cmd_win() {
     in_tmux || die "not in tmux — start a session first: tx new"
     if [ -n "$1" ]; then
@@ -292,6 +291,7 @@ cmd_win() {
     fi
 }
 
+# List all windows
 cmd_wins() {
     if in_tmux; then
         tmux list-windows -F '#I: #W#{?window_active, (active),}'
@@ -300,24 +300,28 @@ cmd_wins() {
     fi
 }
 
+# Switch to the next window
 cmd_next() {
     in_tmux || die "not in tmux"
     tmux next-window
 }
 
+# Switch to the previous window
 cmd_prev() {
     in_tmux || die "not in tmux"
     tmux previous-window
 }
 
+# Rename the current window
 cmd_rename() {
     [ -n "$1" ] || die "usage: tx rename <name>"
     in_tmux || die "not in tmux"
     tmux rename-window "$1"
 }
 
-# --- Help ---
+# Help
 
+# Show all commands or detailed help for a specific command
 cmd_help() {
     if [ -n "$1" ]; then
         cmd_help_detail "$1"
@@ -366,6 +370,7 @@ HELP
 EOF
 }
 
+# Detailed help with examples for a single command
 cmd_help_detail() {
     case "$1" in
         new)
@@ -549,7 +554,7 @@ EOF
     esac
 }
 
-# --- Main dispatch ---
+# Main dispatch
 
 ensure_tmux
 
