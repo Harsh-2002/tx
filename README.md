@@ -5,13 +5,13 @@ A dead-simple tmux wrapper. No keybindings to memorize — just type what you me
 ## Install
 
 ```sh
-git clone https://github.com/av/tx.git && cd tx && ./install.sh
+git clone https://github.com/Harsh-2002/tx.git && cd tx && ./install.sh
 ```
 
 Or just copy the script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/av/tx/main/tx -o /usr/local/bin/tx && chmod +x /usr/local/bin/tx
+curl -fsSL https://raw.githubusercontent.com/Harsh-2002/tx/main/tx -o /usr/local/bin/tx && chmod +x /usr/local/bin/tx
 ```
 
 ## Usage

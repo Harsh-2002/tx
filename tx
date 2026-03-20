@@ -218,12 +218,21 @@ cmd_layout() {
         esac
     done
 
+    # Determine the tmux layout name
+    if [ "$_layout_type" = "grid" ]; then
+        _tmux_layout="tiled"
+    elif [ "$_direction" = "v" ]; then
+        _tmux_layout="even-vertical"
+    else
+        _tmux_layout="even-horizontal"
+    fi
+
     # If not in tmux, create a session first
     if ! in_tmux; then
         _sess="layout-$(date +%s | tail -c 5)"
         tmux new-session -d -s "$_sess"
 
-        # Create N-1 additional panes
+        # Create N-1 additional panes, rebalancing after each split
         _i=1
         while [ "$_i" -lt "$_count" ]; do
             if [ "$_direction" = "v" ] && [ "$_layout_type" = "even" ]; then
@@ -231,17 +240,9 @@ cmd_layout() {
             else
                 tmux split-window -h -t "$_sess"
             fi
+            tmux select-layout -t "$_sess" "$_tmux_layout"
             _i=$(( _i + 1 ))
         done
-
-        # Apply layout
-        if [ "$_layout_type" = "grid" ]; then
-            tmux select-layout -t "$_sess" tiled
-        elif [ "$_direction" = "v" ]; then
-            tmux select-layout -t "$_sess" even-vertical
-        else
-            tmux select-layout -t "$_sess" even-horizontal
-        fi
 
         # Send commands if provided
         _i=1
@@ -254,7 +255,7 @@ cmd_layout() {
 
         tmux attach-session -t "$_sess"
     else
-        # Already in tmux — create panes in current window
+        # Already in tmux — create panes in current window, rebalancing after each split
         _i=1
         while [ "$_i" -lt "$_count" ]; do
             if [ "$_direction" = "v" ] && [ "$_layout_type" = "even" ]; then
@@ -262,17 +263,9 @@ cmd_layout() {
             else
                 tmux split-window -h
             fi
+            tmux select-layout "$_tmux_layout"
             _i=$(( _i + 1 ))
         done
-
-        # Apply layout
-        if [ "$_layout_type" = "grid" ]; then
-            tmux select-layout tiled
-        elif [ "$_direction" = "v" ]; then
-            tmux select-layout even-vertical
-        else
-            tmux select-layout even-horizontal
-        fi
 
         # Send commands if provided
         _i=1
