@@ -123,6 +123,8 @@ _tx() {
         'prev:Previous window'
         'rename:Rename current window'
         'help:Show help'
+        'update:Update tx to latest version'
+        'version:Show version'
     )
 
     _arguments -C \
@@ -148,7 +150,7 @@ _tx() {
                     ;;
                 help)
                     local -a help_cmds
-                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'layout' 'save' 'load' 'saves' 'rm' 'win' 'wins' 'next' 'prev' 'rename')
+                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'layout' 'save' 'load' 'saves' 'rm' 'win' 'wins' 'next' 'prev' 'rename' 'update')
                     _describe 'command' help_cmds
                     ;;
                 layout)
@@ -193,7 +195,7 @@ _tx_completions() {
     local cur prev commands
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename help"
+    commands="new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename help update version"
 
     case "$prev" in
         tx)
@@ -274,11 +276,13 @@ complete -c tx -n '__fish_use_subcommand' -a 'next' -d 'Next window'
 complete -c tx -n '__fish_use_subcommand' -a 'prev' -d 'Previous window'
 complete -c tx -n '__fish_use_subcommand' -a 'rename' -d 'Rename current window'
 complete -c tx -n '__fish_use_subcommand' -a 'help' -d 'Show help'
+complete -c tx -n '__fish_use_subcommand' -a 'update' -d 'Update tx to latest version'
+complete -c tx -n '__fish_use_subcommand' -a 'version' -d 'Show version'
 complete -c tx -n '__fish_seen_subcommand_from a attach kill' -a '(tmux list-sessions -F "#S" 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from load rm' -a '(ls ~/.config/tx/saves/ 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from resize' -a 'left right up down'
 complete -c tx -n '__fish_seen_subcommand_from layout' -a '-v grid'
-complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename'
+complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename update'
 FISH_COMP
         info "Fish completions installed"
         ;;

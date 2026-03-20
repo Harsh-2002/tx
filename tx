@@ -5,7 +5,8 @@
 
 set -e
 
-TX_SAVE_DIR="$HOME/.config/tx/saves"
+TX_VERSION="0.2.0"
+TX_SAVE_DIR="${TX_SAVE_DIR:-$HOME/.config/tx/saves}"
 
 # Color setup — auto-detects terminal support, no colors when piped
 setup_colors() {
@@ -183,6 +184,7 @@ cmd_close() {
 
 # Resize the current pane (left/right/up/down), default 5 cells
 cmd_resize() {
+    [ -n "$1" ] || die "usage: tx resize <left|right|up|down> [amount]"
     in_tmux || die "not in tmux"
     _dir="$1"
     _amount="${2:-5}"
@@ -519,6 +521,40 @@ cmd_rename() {
     tmux rename-window "$1"
 }
 
+# Version and update
+
+cmd_version() {
+    echo "tx ${TX_VERSION}"
+}
+
+# Self-update by downloading the latest tx from GitHub
+cmd_update() {
+    _raw="https://raw.githubusercontent.com/Harsh-2002/tx/main/tx"
+    _self=$(command -v tx 2>/dev/null || echo "$0")
+
+    # Resolve to absolute path
+    case "$_self" in
+        /*) ;;
+        *)  _self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")" ;;
+    esac
+
+    [ -w "$_self" ] || die "cannot write to $_self — try: sudo tx update"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$_raw" > "$_self.tmp"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$_raw" > "$_self.tmp"
+    else
+        die "need curl or wget to update"
+    fi
+
+    chmod +x "$_self.tmp"
+    mv "$_self.tmp" "$_self"
+
+    _new_ver=$("$_self" --version 2>/dev/null || echo "unknown")
+    printf '  %s✓%s Updated to %s%s%s\n' "$GREEN" "$RESET" "$BOLD" "$_new_ver" "$RESET"
+}
+
 # Help
 
 # Show all commands or detailed help for a specific command
@@ -570,9 +606,11 @@ ${BOLD}WINDOWS${RESET}
   ${CYAN}tx prev${RESET}                 Previous window
   ${CYAN}tx rename${RESET} <name>        Rename current window
 
-${BOLD}HELP${RESET}
+${BOLD}OTHER${RESET}
   ${CYAN}tx help${RESET}                 Show this help
   ${CYAN}tx help${RESET} <command>       Show detail for a command
+  ${CYAN}tx --version${RESET}            Show version
+  ${CYAN}tx update${RESET}               Update tx to latest version
 EOF
 }
 
@@ -798,6 +836,16 @@ ${BOLD}tx rename${RESET} <name>
     ${CYAN}tx rename editor${RESET}
 EOF
             ;;
+        update)
+            cat <<EOF
+${BOLD}tx update${RESET}
+  Update tx to the latest version from GitHub.
+  Requires curl or wget. May need sudo if installed in /usr/local/bin.
+
+  ${DIM}Example:${RESET}
+    ${CYAN}tx update${RESET}
+EOF
+            ;;
         *)
             die "unknown command '$1' — run 'tx help' for all commands"
             ;;
@@ -806,7 +854,14 @@ EOF
 
 # Main dispatch
 
-ensure_tmux
+# version/update/help don't need tmux
+case "${1:-}" in
+    --version|-v) cmd_version; exit 0 ;;
+    version)      cmd_version; exit 0 ;;
+    update)       cmd_update; exit 0 ;;
+    help|-h|--help) ;;
+    *)            ensure_tmux ;;
+esac
 
 case "${1:-}" in
     "")       cmd_default ;;

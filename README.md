@@ -46,6 +46,10 @@ WINDOWS
   tx wins                 List windows
   tx next / tx prev       Switch windows
   tx rename <name>        Rename window
+
+OTHER
+  tx --version            Show version
+  tx update               Update tx to latest version
 ```
 
 ### Layout with commands
