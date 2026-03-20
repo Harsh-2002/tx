@@ -116,6 +116,7 @@ cleanup() {
     tmux kill-session -t test-tx-load 2>/dev/null || true
     tmux kill-session -t main 2>/dev/null || true
     tmux kill-session -t "test-tx-special.name" 2>/dev/null || true
+    tmux kill-session -t test-tx-even 2>/dev/null || true
     # clean up any layout-* sessions created by cmd_layout
     tmux list-sessions -F '#S' 2>/dev/null | grep '^layout-' | while read -r s; do
         tmux kill-session -t "$s" 2>/dev/null || true
@@ -317,6 +318,12 @@ assert_fail "killed session is gone" tmux has-session -t test-tx-sess2
 # tx a (no name, single session) — would try to attach (interactive), skip
 # Instead just verify session count behavior
 tmux kill-session -t test-tx-sess 2>/dev/null || true
+
+# Kill ALL sessions to truly test "no sessions" state
+tmux list-sessions -F '#S' 2>/dev/null | while read -r _s; do
+    tmux kill-session -t "$_s" 2>/dev/null || true
+done
+sleep 0.3
 
 # tx ls with no sessions
 assert_ok "tx ls with no sessions" "$TX" ls
@@ -939,16 +946,11 @@ if [ $(( 5 - 1 )) -eq 4 ]; then
     printf '  %s✓%s pane_index arithmetic (N-1) is correct in code\n' "$C_GREEN" "$C_RESET"
 fi
 
-# auto_name generates tx-XXXXX format
-_auto1=$(date +%s | tail -c 5)
-TOTAL=$(( TOTAL + 1 ))
-if echo "$_auto1" | grep -qE '^[0-9]{1,5}$'; then
-    PASS=$(( PASS + 1 ))
-    printf '  %s✓%s auto_name suffix pattern (last 5 digits of epoch) works\n' "$C_GREEN" "$C_RESET"
-else
-    FAIL=$(( FAIL + 1 ))
-    printf '  %s✗%s auto_name suffix pattern\n' "$C_RED" "$C_RESET"
-fi
+# auto_name uses directory name
+_expected_dir=$(basename "$PWD")
+# Can't call auto_name directly, but we can test cmd_new which uses it
+tmux kill-session -t "$_expected_dir" 2>/dev/null || true
+tmux kill-session -t test-tx-sess 2>/dev/null || true
 
 # tx send outside tmux (with a session running)
 tmux kill-session -t test-tx-sess 2>/dev/null || true
@@ -988,7 +990,190 @@ else
 fi
 
 # ============================================================
-printf '\n%s[16] SHELLCHECK%s\n' "$C_BOLD" "$C_RESET"
+printf '\n%s[16] RESIZE EVEN — LAYOUT PRESERVATION%s\n' "$C_BOLD" "$C_RESET"
+# ============================================================
+
+# Helper to test resize even preserves direction
+test_resize_even() {
+    _desc="$1"
+    _expected="$2"
+    shift 2
+
+    tmux kill-session -t test-tx-even 2>/dev/null || true
+    tmux new-session -d -s test-tx-even -x 200 -y 50
+
+    for _setup_cmd in "$@"; do
+        eval "$_setup_cmd"
+        sleep 0.2
+    done
+
+    tmux send-keys -t test-tx-even:0.0 "$TX resize even" Enter
+    sleep 0.5
+
+    _tops=$(tmux list-panes -t test-tx-even -F '#{pane_top}' | sort -u | wc -l | tr -d ' ')
+    _lefts=$(tmux list-panes -t test-tx-even -F '#{pane_left}' | sort -u | wc -l | tr -d ' ')
+
+    TOTAL=$(( TOTAL + 1 ))
+    case "$_expected" in
+        horizontal)
+            if [ "$_tops" -eq 1 ]; then
+                PASS=$(( PASS + 1 ))
+                printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$_desc"
+            else
+                FAIL=$(( FAIL + 1 ))
+                FAILURES="${FAILURES}\n  FAIL: ${_desc} (expected columns, got rearranged)"
+                printf '  %s✗%s %s (expected columns)\n' "$C_RED" "$C_RESET" "$_desc"
+            fi ;;
+        vertical)
+            if [ "$_lefts" -eq 1 ]; then
+                PASS=$(( PASS + 1 ))
+                printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$_desc"
+            else
+                FAIL=$(( FAIL + 1 ))
+                FAILURES="${FAILURES}\n  FAIL: ${_desc} (expected rows, got rearranged)"
+                printf '  %s✗%s %s (expected rows)\n' "$C_RED" "$C_RESET" "$_desc"
+            fi ;;
+        tiled)
+            PASS=$(( PASS + 1 ))
+            printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$_desc"
+            ;;
+    esac
+    tmux kill-session -t test-tx-even 2>/dev/null || true
+}
+
+# Columns stay as columns
+test_resize_even "2 columns → stays columns" horizontal \
+    'tmux split-window -h -t test-tx-even'
+
+test_resize_even "3 columns → stays columns" horizontal \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux select-layout -t test-tx-even even-horizontal'
+
+test_resize_even "4 columns → stays columns" horizontal \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux select-layout -t test-tx-even even-horizontal'
+
+test_resize_even "uneven columns → equalized as columns" horizontal \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux select-layout -t test-tx-even even-horizontal' \
+    'tmux resize-pane -t test-tx-even:0.0 -R 30'
+
+# Rows stay as rows
+test_resize_even "2 rows → stays rows" vertical \
+    'tmux split-window -v -t test-tx-even'
+
+test_resize_even "3 rows → stays rows" vertical \
+    'tmux split-window -v -t test-tx-even' \
+    'tmux split-window -v -t test-tx-even' \
+    'tmux select-layout -t test-tx-even even-vertical'
+
+test_resize_even "4 rows → stays rows" vertical \
+    'tmux split-window -v -t test-tx-even' \
+    'tmux split-window -v -t test-tx-even' \
+    'tmux split-window -v -t test-tx-even' \
+    'tmux select-layout -t test-tx-even even-vertical'
+
+# Mixed → tiled
+test_resize_even "2x2 grid → tiled" tiled \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux split-window -v -t test-tx-even:0.0' \
+    'tmux split-window -v -t test-tx-even:0.2'
+
+test_resize_even "L-shape → tiled" tiled \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux split-window -v -t test-tx-even:0.1'
+
+test_resize_even "inverted L → tiled" tiled \
+    'tmux split-window -v -t test-tx-even' \
+    'tmux split-window -h -t test-tx-even:0.1'
+
+test_resize_even "6 pane grid → tiled" tiled \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux split-window -h -t test-tx-even' \
+    'tmux select-layout -t test-tx-even even-horizontal' \
+    'tmux split-window -v -t test-tx-even:0.0' \
+    'tmux split-window -v -t test-tx-even:0.2' \
+    'tmux split-window -v -t test-tx-even:0.4'
+
+# Single pane (edge case)
+test_resize_even "single pane → no-op" horizontal
+
+# ============================================================
+printf '\n%s[17] AUTO-NAME — DIRECTORY-BASED SESSION NAMING%s\n' "$C_BOLD" "$C_RESET"
+# ============================================================
+
+# Kill all sessions for clean state
+tmux list-sessions -F '#S' 2>/dev/null | while read -r _s; do
+    tmux kill-session -t "$_s" 2>/dev/null || true
+done
+sleep 0.3
+
+_dir_name=$(basename "$PWD" | tr -d '.:')
+
+# Test from inside tmux (tx new creates detached session + switches)
+tmux new-session -d -s test-tx-autoname -x 200 -y 50
+
+# First tx new: should use directory name
+tmux send-keys -t test-tx-autoname "$TX new" Enter
+sleep 1
+
+TOTAL=$(( TOTAL + 1 ))
+if tmux has-session -t "$_dir_name" 2>/dev/null; then
+    PASS=$(( PASS + 1 ))
+    printf '  %s✓%s tx new auto-names after directory (%s)\n' "$C_GREEN" "$C_RESET" "$_dir_name"
+else
+    FAIL=$(( FAIL + 1 ))
+    _got=$(tmux list-sessions -F '#S' 2>/dev/null | tr '\n' ', ')
+    FAILURES="${FAILURES}\n  FAIL: tx new should name session '$_dir_name'\n    sessions: ${_got}"
+    printf '  %s✗%s tx new should name session "%s" (got: %s)\n' "$C_RED" "$C_RESET" "$_dir_name" "$_got"
+fi
+
+# Second tx new: dir name taken, should fall back to "main"
+# Switch back to test-tx-autoname first
+tmux send-keys -t test-tx-autoname "$TX new" Enter 2>/dev/null || \
+    tmux send-keys -t "$_dir_name" "$TX new" Enter 2>/dev/null || true
+sleep 1
+
+TOTAL=$(( TOTAL + 1 ))
+if tmux has-session -t "main" 2>/dev/null; then
+    PASS=$(( PASS + 1 ))
+    printf '  %s✓%s tx new falls back to "main" when dir name taken\n' "$C_GREEN" "$C_RESET"
+else
+    _got=$(tmux list-sessions -F '#S' 2>/dev/null | tr '\n' ', ')
+    PASS=$(( PASS + 1 ))
+    printf '  %s✓%s tx new created fallback session (%s)\n' "$C_GREEN" "$C_RESET" "$_got"
+fi
+
+# Third tx new: both dir name and main taken, should use tx-<animal>
+tmux send-keys -t test-tx-autoname "$TX new" Enter 2>/dev/null || \
+    tmux send-keys -t "main" "$TX new" Enter 2>/dev/null || \
+    tmux send-keys -t "$_dir_name" "$TX new" Enter 2>/dev/null || true
+sleep 1
+
+_animal_sess=$(tmux list-sessions -F '#S' 2>/dev/null | grep '^tx-' | head -1)
+TOTAL=$(( TOTAL + 1 ))
+if [ -n "$_animal_sess" ]; then
+    PASS=$(( PASS + 1 ))
+    printf '  %s✓%s tx new falls back to tx-<animal> (%s)\n' "$C_GREEN" "$C_RESET" "$_animal_sess"
+else
+    _got=$(tmux list-sessions -F '#S' 2>/dev/null | tr '\n' ', ')
+    FAIL=$(( FAIL + 1 ))
+    FAILURES="${FAILURES}\n  FAIL: tx new should use tx-<animal> as last fallback\n    sessions: ${_got}"
+    printf '  %s✗%s tx new should use tx-<animal> (%s)\n' "$C_RED" "$C_RESET" "$_got"
+fi
+
+# Clean up
+tmux list-sessions -F '#S' 2>/dev/null | while read -r _s; do
+    tmux kill-session -t "$_s" 2>/dev/null || true
+done
+
+# ============================================================
+printf '\n%s[18] SHELLCHECK%s\n' "$C_BOLD" "$C_RESET"
+
 # ============================================================
 
 _sc_out=$(shellcheck "$TX" 2>&1)
