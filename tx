@@ -1,0 +1,589 @@
+#!/bin/sh
+# tx — a dead-simple tmux wrapper
+# https://github.com/av/tx
+
+set -e
+
+# --- Helpers ---
+
+ensure_tmux() {
+    command -v tmux >/dev/null 2>&1 || {
+        echo "tx: tmux is not installed" >&2
+        exit 1
+    }
+}
+
+in_tmux() {
+    [ -n "$TMUX" ]
+}
+
+auto_name() {
+    echo "tx-$(date +%s | tail -c 5)"
+}
+
+# Convert 1-indexed (human) pane number to 0-indexed (tmux)
+pane_index() {
+    echo $(( $1 - 1 ))
+}
+
+die() {
+    echo "tx: $*" >&2
+    exit 1
+}
+
+# --- Session commands ---
+
+cmd_default() {
+    if in_tmux; then
+        # Show status
+        _sess=$(tmux display-message -p '#S')
+        _wins=$(tmux list-windows | wc -l | tr -d ' ')
+        _panes=$(tmux list-panes | wc -l | tr -d ' ')
+        echo "Session: $_sess"
+        echo "Windows: $_wins"
+        echo "Panes:   $_panes"
+        echo ""
+        tmux list-windows -F '  #I: #W#{?window_active, (active),}'
+    else
+        _count=$(tmux list-sessions 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$_count" -eq 0 ] 2>/dev/null; then
+            tmux new-session -s main
+        elif [ "$_count" -eq 1 ]; then
+            _name=$(tmux list-sessions -F '#S')
+            tmux attach-session -t "$_name"
+        else
+            echo "Sessions:"
+            tmux list-sessions -F '  #S (#{session_windows} windows, created #{session_created_string})'
+            echo ""
+            echo "Attach with: tx a <name>"
+        fi
+    fi
+}
+
+cmd_new() {
+    _name="${1:-$(auto_name)}"
+    if in_tmux; then
+        tmux new-session -d -s "$_name"
+        tmux switch-client -t "$_name"
+    else
+        tmux new-session -s "$_name"
+    fi
+}
+
+cmd_ls() {
+    tmux list-sessions -F '#S (#{session_windows} windows, created #{session_created_string})' 2>/dev/null || echo "No sessions."
+}
+
+cmd_attach() {
+    if [ -n "$1" ]; then
+        tmux attach-session -t "$1" 2>/dev/null || die "session '$1' not found"
+    else
+        _count=$(tmux list-sessions 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$_count" -eq 0 ] 2>/dev/null; then
+            die "no sessions to attach to"
+        elif [ "$_count" -eq 1 ]; then
+            tmux attach-session
+        else
+            echo "Multiple sessions — specify one:"
+            tmux list-sessions -F '  #S'
+            echo ""
+            echo "Usage: tx a <name>"
+        fi
+    fi
+}
+
+cmd_detach() {
+    in_tmux || die "not in a tmux session"
+    tmux detach-client
+}
+
+cmd_kill() {
+    if [ -n "$1" ]; then
+        tmux kill-session -t "$1" 2>/dev/null || die "session '$1' not found"
+    else
+        if in_tmux; then
+            tmux kill-session
+        else
+            die "specify a session name: tx kill <name>"
+        fi
+    fi
+}
+
+# --- Pane commands ---
+
+cmd_split() {
+    if in_tmux; then
+        tmux split-window -h
+    else
+        die "not in tmux — start a session first: tx new"
+    fi
+}
+
+cmd_vsplit() {
+    if in_tmux; then
+        tmux split-window -v
+    else
+        die "not in tmux — start a session first: tx new"
+    fi
+}
+
+cmd_pane() {
+    [ -n "$1" ] || die "usage: tx pane <number>"
+    in_tmux || die "not in tmux"
+    _idx=$(pane_index "$1")
+    tmux select-pane -t "$_idx" 2>/dev/null || die "pane $1 does not exist"
+}
+
+cmd_close() {
+    in_tmux || die "not in tmux"
+    tmux kill-pane
+}
+
+cmd_resize() {
+    in_tmux || die "not in tmux"
+    _dir="$1"
+    _amount="${2:-5}"
+    case "$_dir" in
+        left)  tmux resize-pane -L "$_amount" ;;
+        right) tmux resize-pane -R "$_amount" ;;
+        up)    tmux resize-pane -U "$_amount" ;;
+        down)  tmux resize-pane -D "$_amount" ;;
+        *)     die "usage: tx resize <left|right|up|down> [amount]" ;;
+    esac
+}
+
+cmd_swap() {
+    [ -n "$1" ] || die "usage: tx swap <pane-number>"
+    in_tmux || die "not in tmux"
+    _idx=$(pane_index "$1")
+    tmux swap-pane -t "$_idx" 2>/dev/null || die "pane $1 does not exist"
+}
+
+cmd_full() {
+    in_tmux || die "not in tmux"
+    tmux resize-pane -Z
+}
+
+# --- Send command ---
+
+cmd_send() {
+    [ -n "$1" ] && [ -n "$2" ] || die "usage: tx send <pane-number> '<command>'"
+    _idx=$(pane_index "$1")
+    shift
+    _cmd="$*"
+    if in_tmux; then
+        tmux send-keys -t "$_idx" "$_cmd" Enter
+    else
+        # Outside tmux — send to the first session's pane
+        tmux send-keys -t "$_idx" "$_cmd" Enter 2>/dev/null || die "cannot send — no active session or pane $1 not found"
+    fi
+}
+
+# --- Layout command ---
+
+cmd_layout() {
+    [ -n "$1" ] || die "usage: tx layout <count> [-v] [grid] [commands...]"
+
+    _count="$1"
+    shift
+
+    # Validate count is a number
+    case "$_count" in
+        ''|*[!0-9]*) die "pane count must be a number" ;;
+    esac
+    [ "$_count" -ge 1 ] || die "pane count must be at least 1"
+
+    _direction="h"
+    _layout_type="even"
+    _cmds=""
+    _cmd_count=0
+
+    # Parse remaining args
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -v)
+                _direction="v"
+                shift
+                ;;
+            grid)
+                _layout_type="grid"
+                shift
+                ;;
+            *)
+                # Collect commands
+                _cmd_count=$(( _cmd_count + 1 ))
+                eval "_cmd_${_cmd_count}=\"\$1\""
+                shift
+                ;;
+        esac
+    done
+
+    # If not in tmux, create a session first
+    if ! in_tmux; then
+        _sess="layout-$(date +%s | tail -c 5)"
+        tmux new-session -d -s "$_sess"
+
+        # Create N-1 additional panes
+        _i=1
+        while [ "$_i" -lt "$_count" ]; do
+            if [ "$_direction" = "v" ] && [ "$_layout_type" = "even" ]; then
+                tmux split-window -v -t "$_sess"
+            else
+                tmux split-window -h -t "$_sess"
+            fi
+            _i=$(( _i + 1 ))
+        done
+
+        # Apply layout
+        if [ "$_layout_type" = "grid" ]; then
+            tmux select-layout -t "$_sess" tiled
+        elif [ "$_direction" = "v" ]; then
+            tmux select-layout -t "$_sess" even-vertical
+        else
+            tmux select-layout -t "$_sess" even-horizontal
+        fi
+
+        # Send commands if provided
+        _i=1
+        while [ "$_i" -le "$_cmd_count" ]; do
+            eval "_c=\$_cmd_${_i}"
+            _pane_idx=$(( _i - 1 ))
+            tmux send-keys -t "${_sess}:0.${_pane_idx}" "$_c" Enter
+            _i=$(( _i + 1 ))
+        done
+
+        tmux attach-session -t "$_sess"
+    else
+        # Already in tmux — create panes in current window
+        _i=1
+        while [ "$_i" -lt "$_count" ]; do
+            if [ "$_direction" = "v" ] && [ "$_layout_type" = "even" ]; then
+                tmux split-window -v
+            else
+                tmux split-window -h
+            fi
+            _i=$(( _i + 1 ))
+        done
+
+        # Apply layout
+        if [ "$_layout_type" = "grid" ]; then
+            tmux select-layout tiled
+        elif [ "$_direction" = "v" ]; then
+            tmux select-layout even-vertical
+        else
+            tmux select-layout even-horizontal
+        fi
+
+        # Send commands if provided
+        _i=1
+        while [ "$_i" -le "$_cmd_count" ]; do
+            eval "_c=\$_cmd_${_i}"
+            _pane_idx=$(( _i - 1 ))
+            tmux send-keys -t "$_pane_idx" "$_c" Enter
+            _i=$(( _i + 1 ))
+        done
+
+        # Select first pane
+        tmux select-pane -t 0
+    fi
+}
+
+# --- Window commands ---
+
+cmd_win() {
+    in_tmux || die "not in tmux — start a session first: tx new"
+    if [ -n "$1" ]; then
+        tmux new-window -n "$1"
+    else
+        tmux new-window
+    fi
+}
+
+cmd_wins() {
+    if in_tmux; then
+        tmux list-windows -F '#I: #W#{?window_active, (active),}'
+    else
+        tmux list-windows -a -F '#S:#I: #W' 2>/dev/null || echo "No sessions."
+    fi
+}
+
+cmd_next() {
+    in_tmux || die "not in tmux"
+    tmux next-window
+}
+
+cmd_prev() {
+    in_tmux || die "not in tmux"
+    tmux previous-window
+}
+
+cmd_rename() {
+    [ -n "$1" ] || die "usage: tx rename <name>"
+    in_tmux || die "not in tmux"
+    tmux rename-window "$1"
+}
+
+# --- Help ---
+
+cmd_help() {
+    if [ -n "$1" ]; then
+        cmd_help_detail "$1"
+        return
+    fi
+
+    cat <<'EOF'
+tx — a dead-simple tmux wrapper
+
+SESSIONS
+  tx                      Smart default (attach/create/list)
+  tx new [name]           New session (auto-names if omitted)
+  tx ls                   List sessions
+  tx a [name]             Attach to session
+  tx detach               Detach from current session
+  tx kill [name]          Kill session
+
+PANES
+  tx split                Split side-by-side (left/right)
+  tx vsplit               Split top/bottom
+  tx pane <n>             Switch to pane N (1-indexed)
+  tx close                Close current pane
+  tx resize <dir> [n]     Resize pane (left/right/up/down, default 5)
+  tx swap <n>             Swap current pane with pane N
+  tx full                 Toggle fullscreen on current pane
+
+SEND
+  tx send <n> '<cmd>'     Run command in pane N
+
+LAYOUT
+  tx layout <n>           Create N columns (horizontal)
+  tx layout <n> -v        Create N rows (vertical)
+  tx layout <n> grid      Create N panes in a grid
+  tx layout <n> [cmds..]  Create panes and run commands in each
+
+WINDOWS
+  tx win [name]           New window
+  tx wins                 List windows
+  tx next                 Next window
+  tx prev                 Previous window
+  tx rename <name>        Rename current window
+
+HELP
+  tx help                 Show this help
+  tx help <command>       Show detail for a command
+EOF
+}
+
+cmd_help_detail() {
+    case "$1" in
+        new)
+            cat <<'EOF'
+tx new [name]
+  Create a new tmux session.
+  If no name given, auto-generates one.
+
+  Examples:
+    tx new           → new session with auto-generated name
+    tx new work      → new session named "work"
+EOF
+            ;;
+        ls)
+            cat <<'EOF'
+tx ls
+  List all tmux sessions.
+
+  Example:
+    tx ls
+EOF
+            ;;
+        a|attach)
+            cat <<'EOF'
+tx a [name]
+  Attach to a session. If only one session exists, attaches
+  automatically. If multiple, lists them.
+
+  Examples:
+    tx a             → attach to the only session
+    tx a work        → attach to session "work"
+EOF
+            ;;
+        detach)
+            cat <<'EOF'
+tx detach
+  Detach from the current tmux session.
+  Must be inside tmux.
+EOF
+            ;;
+        kill)
+            cat <<'EOF'
+tx kill [name]
+  Kill a session. If inside tmux with no name, kills current session.
+
+  Examples:
+    tx kill work     → kill session "work"
+    tx kill          → kill current session (inside tmux)
+EOF
+            ;;
+        split)
+            cat <<'EOF'
+tx split
+  Split the current pane side-by-side (left/right).
+  Must be inside tmux.
+EOF
+            ;;
+        vsplit)
+            cat <<'EOF'
+tx vsplit
+  Split the current pane top/bottom.
+  Must be inside tmux.
+EOF
+            ;;
+        pane)
+            cat <<'EOF'
+tx pane <n>
+  Switch to pane N. Panes are 1-indexed (1, 2, 3...).
+
+  Examples:
+    tx pane 1        → switch to first pane
+    tx pane 3        → switch to third pane
+EOF
+            ;;
+        close)
+            cat <<'EOF'
+tx close
+  Close the current pane. Must be inside tmux.
+EOF
+            ;;
+        resize)
+            cat <<'EOF'
+tx resize <direction> [amount]
+  Resize the current pane. Direction: left, right, up, down.
+  Amount defaults to 5 cells.
+
+  Examples:
+    tx resize left       → shrink pane 5 cells left
+    tx resize right 10   → grow pane 10 cells right
+    tx resize up 3       → grow pane 3 cells up
+EOF
+            ;;
+        swap)
+            cat <<'EOF'
+tx swap <n>
+  Swap the current pane with pane N (1-indexed).
+
+  Example:
+    tx swap 2        → swap current pane with pane 2
+EOF
+            ;;
+        full)
+            cat <<'EOF'
+tx full
+  Toggle fullscreen (zoom) on the current pane.
+  Run again to restore.
+EOF
+            ;;
+        send)
+            cat <<'EOF'
+tx send <n> '<command>'
+  Send a command to pane N (1-indexed).
+
+  Examples:
+    tx send 1 'ls -la'       → run ls in pane 1
+    tx send 2 'npm start'    → run npm start in pane 2
+EOF
+            ;;
+        layout)
+            cat <<'EOF'
+tx layout <count> [-v] [grid] [commands...]
+  Create multiple panes with a layout.
+
+  Directions:
+    (default)    Horizontal columns (side-by-side)
+    -v           Vertical rows (stacked)
+    grid         Tiled grid
+
+  If not in tmux, creates a new session automatically.
+  Commands after the count/flags are sent to each pane.
+
+  Examples:
+    tx layout 2                              → 2 columns
+    tx layout 3 -v                           → 3 rows
+    tx layout 4 grid                         → 2x2 grid
+    tx layout 3 'vim' 'npm run dev' 'htop'   → 3 columns with commands
+    tx layout 3 -v 'cmd1' 'cmd2' 'cmd3'     → 3 rows with commands
+EOF
+            ;;
+        win)
+            cat <<'EOF'
+tx win [name]
+  Create a new window. Auto-names if no name given.
+
+  Examples:
+    tx win           → new window
+    tx win logs      → new window named "logs"
+EOF
+            ;;
+        wins)
+            cat <<'EOF'
+tx wins
+  List all windows in the current session.
+EOF
+            ;;
+        next)
+            cat <<'EOF'
+tx next
+  Switch to the next window.
+EOF
+            ;;
+        prev)
+            cat <<'EOF'
+tx prev
+  Switch to the previous window.
+EOF
+            ;;
+        rename)
+            cat <<'EOF'
+tx rename <name>
+  Rename the current window.
+
+  Example:
+    tx rename editor
+EOF
+            ;;
+        *)
+            echo "tx: unknown command '$1'"
+            echo "Run 'tx help' for all commands."
+            ;;
+    esac
+}
+
+# --- Main dispatch ---
+
+ensure_tmux
+
+case "${1:-}" in
+    "")       cmd_default ;;
+    new)      shift; cmd_new "$@" ;;
+    ls)       shift; cmd_ls ;;
+    a)        shift; cmd_attach "$@" ;;
+    attach)   shift; cmd_attach "$@" ;;
+    detach)   shift; cmd_detach ;;
+    kill)     shift; cmd_kill "$@" ;;
+    split)    shift; cmd_split ;;
+    vsplit)   shift; cmd_vsplit ;;
+    pane)     shift; cmd_pane "$@" ;;
+    close)    shift; cmd_close ;;
+    resize)   shift; cmd_resize "$@" ;;
+    swap)     shift; cmd_swap "$@" ;;
+    full)     shift; cmd_full ;;
+    send)     shift; cmd_send "$@" ;;
+    layout)   shift; cmd_layout "$@" ;;
+    win)      shift; cmd_win "$@" ;;
+    wins)     shift; cmd_wins ;;
+    next)     shift; cmd_next ;;
+    prev)     shift; cmd_prev ;;
+    rename)   shift; cmd_rename "$@" ;;
+    help)     shift; cmd_help "$@" ;;
+    -h)       cmd_help ;;
+    --help)   cmd_help ;;
+    *)        echo "tx: unknown command '$1'"; echo "Run 'tx help' for all commands."; exit 1 ;;
+esac
