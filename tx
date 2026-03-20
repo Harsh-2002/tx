@@ -5,7 +5,7 @@
 
 set -e
 
-TX_VERSION="0.4.0"
+TX_VERSION="0.5.0"
 TX_SAVE_DIR="${TX_SAVE_DIR:-$HOME/.config/tx/saves}"
 
 # Color setup — auto-detects terminal support, no colors when piped
@@ -41,13 +41,24 @@ auto_name() {
     _dir=$(basename "$PWD" 2>/dev/null)
     # Remove characters tmux doesn't like in session names
     _dir=$(echo "$_dir" | tr -d '.:')
-    # Fallback chain: dir name → "main" → timestamp
+    # Fallback chain: dir name → "main" → tx-<animal>
     if [ -n "$_dir" ] && ! tmux has-session -t "$_dir" 2>/dev/null; then
         echo "$_dir"
     elif ! tmux has-session -t "main" 2>/dev/null; then
         echo "main"
     else
-        echo "tx-$(date +%s | tail -c 5)"
+        _names="fox owl lynx puma yak emu cobra raven otter panda hawk viper falcon wolf bear tiger robin finch crane heron dove moose bison eagle orca"
+        _pick=$(echo "$_names" | tr ' ' '\n' | awk "BEGIN{srand($$+PROCINFO[\"pid\"])}{a[NR]=\$0}END{print a[int(rand()*NR)+1]}" 2>/dev/null || echo "$_names" | tr ' ' '\n' | awk "BEGIN{srand($$)}{a[NR]=\$0}END{print a[int(rand()*NR)+1]}")
+        _name="tx-${_pick}"
+        # If that name is also taken, append a digit
+        if tmux has-session -t "$_name" 2>/dev/null; then
+            _i=2
+            while tmux has-session -t "${_name}${_i}" 2>/dev/null; do
+                _i=$(( _i + 1 ))
+            done
+            _name="${_name}${_i}"
+        fi
+        echo "$_name"
     fi
 }
 
