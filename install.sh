@@ -1,112 +1,88 @@
 #!/bin/sh
-# tx installer — copies tx to your PATH and sets up shell completions
+# tx installer — one command, ready to go
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TX_SOURCE="${SCRIPT_DIR}/tx"
+REPO="Harsh-2002/tx"
+RAW="https://raw.githubusercontent.com/${REPO}/main"
 
-# --- Helpers ---
+info() { printf '  \033[1;32m✓\033[0m %s\n' "$1"; }
+warn() { printf '  \033[1;33m!\033[0m %s\n' "$1"; }
+fail() { printf '  \033[1;31m✗\033[0m %s\n' "$1" >&2; exit 1; }
 
-info() {
-    printf '  \033[1;32m✓\033[0m %s\n' "$1"
+# --- Pick a download tool ---
+
+fetch() {
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$1"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$1"
+    else
+        fail "Need curl or wget to install"
+    fi
 }
 
-warn() {
-    printf '  \033[1;33m!\033[0m %s\n' "$1"
-}
-
-fail() {
-    printf '  \033[1;31m✗\033[0m %s\n' "$1" >&2
-    exit 1
-}
-
-# --- Determine install directory ---
+# --- Install dir ---
 
 if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
-    INSTALL_DIR="/usr/local/bin"
-elif [ -d "$HOME/.local/bin" ]; then
-    INSTALL_DIR="$HOME/.local/bin"
+    BIN="/usr/local/bin"
 else
-    mkdir -p "$HOME/.local/bin"
-    INSTALL_DIR="$HOME/.local/bin"
+    BIN="$HOME/.local/bin"
+    mkdir -p "$BIN"
 fi
 
-# --- Install the script ---
+echo ""
+echo "Installing tx..."
+echo ""
 
-cp "$TX_SOURCE" "${INSTALL_DIR}/tx"
-chmod +x "${INSTALL_DIR}/tx"
-info "Installed tx to ${INSTALL_DIR}/tx"
+# --- Download and install tx ---
+
+fetch "${RAW}/tx" > "${BIN}/tx"
+chmod +x "${BIN}/tx"
+info "Installed tx to ${BIN}/tx"
+
+# --- Ensure BIN is in PATH ---
+
+add_to_path() {
+    _line="export PATH=\"${BIN}:\$PATH\""
+    for _rc in "$@"; do
+        [ -f "$_rc" ] || continue
+        case "$(cat "$_rc")" in
+            *"$BIN"*) return 0 ;;
+        esac
+    done
+    # Add to the first rc file that exists (or create it)
+    _target="$1"
+    echo "" >> "$_target"
+    echo "# tx" >> "$_target"
+    echo "$_line" >> "$_target"
+    info "Added ${BIN} to PATH in ${_target}"
+}
+
+case ":$PATH:" in
+    *":${BIN}:"*) ;;
+    *)
+        _shell="$(basename "${SHELL:-/bin/sh}")"
+        case "$_shell" in
+            zsh)  add_to_path "$HOME/.zshrc" ;;
+            bash) add_to_path "$HOME/.bashrc" "$HOME/.bash_profile" ;;
+            fish) mkdir -p "$HOME/.config/fish"
+                  echo "fish_add_path ${BIN}" >> "$HOME/.config/fish/config.fish"
+                  info "Added ${BIN} to PATH in config.fish" ;;
+            *)    add_to_path "$HOME/.profile" ;;
+        esac
+        ;;
+esac
 
 # --- Shell completions ---
 
-TX_COMMANDS="new ls a attach detach kill split vsplit pane close resize swap full send layout win wins next prev rename help"
+_shell="$(basename "${SHELL:-/bin/sh}")"
 
-install_bash_completion() {
-    _comp_dir=""
-    if [ -d "/usr/local/etc/bash_completion.d" ] && [ -w "/usr/local/etc/bash_completion.d" ]; then
-        _comp_dir="/usr/local/etc/bash_completion.d"
-    elif [ -d "/etc/bash_completion.d" ] && [ -w "/etc/bash_completion.d" ]; then
-        _comp_dir="/etc/bash_completion.d"
-    else
-        _comp_dir="$HOME/.local/share/bash-completion/completions"
-        mkdir -p "$_comp_dir"
-    fi
-
-    cat > "${_comp_dir}/tx" <<'BASH_COMP'
-_tx_completions() {
-    local cur prev commands
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="new ls a attach detach kill split vsplit pane close resize swap full send layout win wins next prev rename help"
-
-    case "$prev" in
-        tx)
-            COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-            return
-            ;;
-        a|attach|kill)
-            local sessions
-            sessions=$(tmux list-sessions -F '#S' 2>/dev/null)
-            COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
-            return
-            ;;
-        resize)
-            COMPREPLY=($(compgen -W "left right up down" -- "$cur"))
-            return
-            ;;
-        help)
-            COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-            return
-            ;;
-        layout)
-            COMPREPLY=($(compgen -W "2 3 4 5 6" -- "$cur"))
-            return
-            ;;
-    esac
-
-    # After layout count, suggest flags
-    if [ "${COMP_WORDS[1]}" = "layout" ] && [ "$COMP_CWORD" -eq 3 ]; then
-        COMPREPLY=($(compgen -W "-v grid" -- "$cur"))
-        return
-    fi
-}
-complete -F _tx_completions tx
-BASH_COMP
-    info "Bash completions installed to ${_comp_dir}/tx"
-}
-
-install_zsh_completion() {
-    _comp_dir=""
-    if [ -d "/usr/local/share/zsh/site-functions" ] && [ -w "/usr/local/share/zsh/site-functions" ]; then
-        _comp_dir="/usr/local/share/zsh/site-functions"
-    elif [ -d "$HOME/.zsh/completions" ]; then
-        _comp_dir="$HOME/.zsh/completions"
-    else
+case "$_shell" in
+    zsh)
         _comp_dir="$HOME/.zsh/completions"
         mkdir -p "$_comp_dir"
-    fi
 
-    cat > "${_comp_dir}/_tx" <<'ZSH_COMP'
+        cat > "${_comp_dir}/_tx" <<'ZSH_COMP'
 #compdef tx
 
 _tx_sessions() {
@@ -166,7 +142,7 @@ _tx() {
                     ;;
                 layout)
                     if [ "$CURRENT" -eq 2 ]; then
-                        _message 'pane count (2-6)'
+                        _message 'pane count'
                     elif [ "$CURRENT" -eq 3 ]; then
                         local -a layout_opts
                         layout_opts=('-v:Vertical (stacked rows)' 'grid:Tiled grid layout')
@@ -183,31 +159,75 @@ _tx() {
 
 _tx "$@"
 ZSH_COMP
-    info "Zsh completions installed to ${_comp_dir}/_tx"
+        info "Zsh completions installed"
 
-    # Check if completion dir is in fpath
-    case "$FPATH" in
-        *"$_comp_dir"*)
-            ;;
-        *)
-            warn "Add this to your .zshrc if completions don't work:"
-            echo "    fpath=(${_comp_dir} \$fpath)"
-            echo "    autoload -Uz compinit && compinit"
-            ;;
+        # Ensure fpath + compinit in .zshrc
+        if ! grep -q '.zsh/completions' "$HOME/.zshrc" 2>/dev/null; then
+            cat >> "$HOME/.zshrc" <<'ZSHRC'
+
+# tx completions
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
+ZSHRC
+            info "Updated .zshrc with completion config"
+        fi
+        ;;
+
+    bash)
+        _comp_dir="$HOME/.local/share/bash-completion/completions"
+        mkdir -p "$_comp_dir"
+
+        cat > "${_comp_dir}/tx" <<'BASH_COMP'
+_tx_completions() {
+    local cur prev commands
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    commands="new ls a attach detach kill split vsplit pane close resize swap full send layout win wins next prev rename help"
+
+    case "$prev" in
+        tx)
+            COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+            return ;;
+        a|attach|kill)
+            local sessions
+            sessions=$(tmux list-sessions -F '#S' 2>/dev/null)
+            COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
+            return ;;
+        resize)
+            COMPREPLY=($(compgen -W "left right up down" -- "$cur"))
+            return ;;
+        help)
+            COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+            return ;;
+        layout)
+            COMPREPLY=($(compgen -W "2 3 4 5 6" -- "$cur"))
+            return ;;
     esac
+
+    if [ "${COMP_WORDS[1]}" = "layout" ] && [ "$COMP_CWORD" -eq 3 ]; then
+        COMPREPLY=($(compgen -W "-v grid" -- "$cur"))
+        return
+    fi
 }
+complete -F _tx_completions tx
+BASH_COMP
+        info "Bash completions installed"
 
-install_fish_completion() {
-    _comp_dir="$HOME/.config/fish/completions"
-    mkdir -p "$_comp_dir"
+        # Source completions in .bashrc if not already
+        if ! grep -q 'bash-completion/completions/tx' "$HOME/.bashrc" 2>/dev/null; then
+            echo '' >> "$HOME/.bashrc"
+            echo '# tx completions' >> "$HOME/.bashrc"
+            echo '[ -f ~/.local/share/bash-completion/completions/tx ] && . ~/.local/share/bash-completion/completions/tx' >> "$HOME/.bashrc"
+            info "Updated .bashrc with completion config"
+        fi
+        ;;
 
-    cat > "${_comp_dir}/tx.fish" <<'FISH_COMP'
-# tx completions for fish
+    fish)
+        _comp_dir="$HOME/.config/fish/completions"
+        mkdir -p "$_comp_dir"
 
-# Disable file completions by default
+        cat > "${_comp_dir}/tx.fish" <<'FISH_COMP'
 complete -c tx -f
-
-# Main commands
 complete -c tx -n '__fish_use_subcommand' -a 'new' -d 'Create a new session'
 complete -c tx -n '__fish_use_subcommand' -a 'ls' -d 'List sessions'
 complete -c tx -n '__fish_use_subcommand' -a 'a' -d 'Attach to session'
@@ -229,53 +249,36 @@ complete -c tx -n '__fish_use_subcommand' -a 'next' -d 'Next window'
 complete -c tx -n '__fish_use_subcommand' -a 'prev' -d 'Previous window'
 complete -c tx -n '__fish_use_subcommand' -a 'rename' -d 'Rename current window'
 complete -c tx -n '__fish_use_subcommand' -a 'help' -d 'Show help'
-
-# Session name completions for attach/kill
 complete -c tx -n '__fish_seen_subcommand_from a attach kill' -a '(tmux list-sessions -F "#S" 2>/dev/null)'
-
-# Resize directions
 complete -c tx -n '__fish_seen_subcommand_from resize' -a 'left right up down'
-
-# Layout options
 complete -c tx -n '__fish_seen_subcommand_from layout' -a '-v grid'
-
-# Help subcommands
 complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send layout win wins next prev rename'
 FISH_COMP
-    info "Fish completions installed to ${_comp_dir}/tx.fish"
-}
-
-# --- Detect shells and install completions ---
-
-echo ""
-echo "Installing tx..."
-echo ""
-
-# Always install the script (already done above)
-
-# Install completions for detected shells
-if command -v bash >/dev/null 2>&1; then
-    install_bash_completion
-fi
-
-if command -v zsh >/dev/null 2>&1; then
-    install_zsh_completion
-fi
-
-if command -v fish >/dev/null 2>&1; then
-    install_fish_completion
-fi
-
-echo ""
-echo "Done! Run 'tx help' to get started."
-
-# Check if install dir is in PATH
-case ":$PATH:" in
-    *":${INSTALL_DIR}:"*)
-        ;;
-    *)
-        echo ""
-        warn "${INSTALL_DIR} is not in your PATH. Add it:"
-        echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
+        info "Fish completions installed"
         ;;
 esac
+
+# --- Reload shell config ---
+
+echo ""
+
+_shell="$(basename "${SHELL:-/bin/sh}")"
+case "$_shell" in
+    zsh)
+        # Clear zsh completion cache so new completions are picked up
+        rm -f "$HOME/.zcompdump" 2>/dev/null
+        info "Cleared completion cache (will rebuild on next shell)"
+        ;;
+esac
+
+echo ""
+echo "Done! Start a new shell or run:"
+echo ""
+case "$_shell" in
+    zsh)  echo "  source ~/.zshrc" ;;
+    bash) echo "  source ~/.bashrc" ;;
+    fish) echo "  source ~/.config/fish/config.fish" ;;
+    *)    echo "  source ~/.profile" ;;
+esac
+echo ""
+echo "Then type 'tx help' to get started."

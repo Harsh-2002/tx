@@ -5,14 +5,10 @@ A dead-simple tmux wrapper. No keybindings to memorize — just type what you me
 ## Install
 
 ```sh
-git clone https://github.com/Harsh-2002/tx.git && cd tx && ./install.sh
+curl -fsSL https://raw.githubusercontent.com/Harsh-2002/tx/main/install.sh | sh
 ```
 
-Or just copy the script:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Harsh-2002/tx/main/tx -o /usr/local/bin/tx && chmod +x /usr/local/bin/tx
-```
+That's it. Downloads `tx`, puts it in your PATH, sets up tab completions, done.
 
 ## Usage
 
@@ -48,13 +44,13 @@ WINDOWS
 
 ### Layout with commands
 
-The killer feature — create panes and run commands in one shot:
+Create panes and run commands in one shot:
 
 ```sh
 tx layout 3 'vim' 'npm run dev' 'htop'
 ```
 
-This creates 3 columns and runs a command in each one.
+3 columns, each running a command.
 
 ```sh
 tx layout 4 grid                        # 2x2 grid
@@ -71,7 +67,7 @@ tx layout 3 -v 'cmd1' 'cmd2' 'cmd3'     # 3 stacked rows with commands
 ## Requirements
 
 - `tmux`
-- POSIX shell (`/bin/sh`)
+- `/bin/sh`
 
 ## License
 

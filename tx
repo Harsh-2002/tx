@@ -1,6 +1,6 @@
 #!/bin/sh
 # tx — a dead-simple tmux wrapper
-# https://github.com/av/tx
+# https://github.com/Harsh-2002/tx
 
 set -e
 
