@@ -182,9 +182,9 @@ cmd_close() {
     tmux kill-pane
 }
 
-# Resize the current pane (left/right/up/down), default 5 cells
+# Resize the current pane or rebalance all panes
 cmd_resize() {
-    [ -n "$1" ] || die "usage: tx resize <left|right|up|down> [amount]"
+    [ -n "$1" ] || die "usage: tx resize <left|right|up|down|even> [amount]"
     in_tmux || die "not in tmux"
     _dir="$1"
     _amount="${2:-5}"
@@ -193,7 +193,8 @@ cmd_resize() {
         right) tmux resize-pane -R "$_amount" ;;
         up)    tmux resize-pane -U "$_amount" ;;
         down)  tmux resize-pane -D "$_amount" ;;
-        *)     die "usage: tx resize <left|right|up|down> [amount]" ;;
+        even)  tmux select-layout tiled ;;
+        *)     die "usage: tx resize <left|right|up|down|even> [amount]" ;;
     esac
 }
 
@@ -580,7 +581,7 @@ ${BOLD}PANES${RESET}
   ${CYAN}tx vsplit${RESET}               Split top/bottom
   ${CYAN}tx pane${RESET} <n>             Switch to pane N (1-indexed)
   ${CYAN}tx close${RESET}                Close current pane
-  ${CYAN}tx resize${RESET} <dir> [n]     Resize pane (left/right/up/down, default 5)
+  ${CYAN}tx resize${RESET} <dir> [n]     Resize pane (left/right/up/down/even)
   ${CYAN}tx swap${RESET} <n>             Swap current pane with pane N
   ${CYAN}tx full${RESET}                 Toggle fullscreen on current pane
 
@@ -701,10 +702,13 @@ ${BOLD}tx resize${RESET} <direction> [amount]
   Resize the current pane. Direction: left, right, up, down.
   Amount defaults to 5 cells.
 
+  Use ${CYAN}tx resize even${RESET} to rebalance all panes to equal size.
+
   ${DIM}Examples:${RESET}
     ${CYAN}tx resize left${RESET}       → shrink pane 5 cells left
     ${CYAN}tx resize right 10${RESET}   → grow pane 10 cells right
     ${CYAN}tx resize up 3${RESET}       → grow pane 3 cells up
+    ${CYAN}tx resize even${RESET}       → make all panes equal size
 EOF
             ;;
         swap)

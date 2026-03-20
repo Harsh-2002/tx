@@ -145,7 +145,7 @@ _tx() {
                     ;;
                 resize)
                     local -a directions
-                    directions=('left' 'right' 'up' 'down')
+                    directions=('left' 'right' 'up' 'down' 'even')
                     _describe 'direction' directions
                     ;;
                 help)
@@ -215,7 +215,7 @@ _tx_completions() {
             fi
             return ;;
         resize)
-            COMPREPLY=($(compgen -W "left right up down" -- "$cur"))
+            COMPREPLY=($(compgen -W "left right up down even" -- "$cur"))
             return ;;
         help)
             COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -280,7 +280,7 @@ complete -c tx -n '__fish_use_subcommand' -a 'update' -d 'Update tx to latest ve
 complete -c tx -n '__fish_use_subcommand' -a 'version' -d 'Show version'
 complete -c tx -n '__fish_seen_subcommand_from a attach kill' -a '(tmux list-sessions -F "#S" 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from load rm' -a '(ls ~/.config/tx/saves/ 2>/dev/null)'
-complete -c tx -n '__fish_seen_subcommand_from resize' -a 'left right up down'
+complete -c tx -n '__fish_seen_subcommand_from resize' -a 'left right up down even'
 complete -c tx -n '__fish_seen_subcommand_from layout' -a '-v grid'
 complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename update'
 FISH_COMP

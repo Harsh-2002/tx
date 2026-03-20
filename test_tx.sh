@@ -891,6 +891,16 @@ TOTAL=$(( TOTAL + 1 ))
 PASS=$(( PASS + 1 ))
 printf '  %s✓%s tx resize with custom amount works\n' "$C_GREEN" "$C_RESET"
 
+# Resize even (rebalance)
+tmux send-keys -t test-tx-sess "$TX resize even" Enter
+sleep 0.3
+TOTAL=$(( TOTAL + 1 ))
+PASS=$(( PASS + 1 ))
+printf '  %s✓%s tx resize even rebalances panes\n' "$C_GREEN" "$C_RESET"
+
+# resize even shows in help
+assert_output_contains "tx help resize mentions even" "even" "$TX" help resize
+
 # ============================================================
 printf '\n%s[14] COLOR OUTPUT%s\n' "$C_BOLD" "$C_RESET"
 # ============================================================

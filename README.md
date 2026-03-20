@@ -28,7 +28,7 @@ PANES
   tx layout <n> grid      Grid layout
   tx pane <n>             Switch to pane N
   tx close                Close current pane
-  tx resize <dir> [n]     Resize (left/right/up/down)
+  tx resize <dir> [n]     Resize (left/right/up/down/even)
   tx swap <n>             Swap with pane N
   tx full                 Toggle fullscreen
 
