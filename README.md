@@ -35,6 +35,12 @@ PANES
 SEND
   tx send <n> '<cmd>'     Run command in pane N
 
+SAVE / LOAD
+  tx save [name]          Save current layout + commands
+  tx load <name>          Restore a saved layout
+  tx saves                List saved layouts
+  tx rm <name>            Delete a saved layout
+
 WINDOWS
   tx win [name]           New window
   tx wins                 List windows
@@ -57,12 +63,23 @@ tx layout 4 grid                        # 2x2 grid
 tx layout 3 -v 'cmd1' 'cmd2' 'cmd3'     # 3 stacked rows with commands
 ```
 
+### Save and load
+
+Save your perfect setup once, restore it anytime:
+
+```sh
+tx save backend          # snapshot current layout + commands
+tx load backend          # recreate the exact setup
+tx saves                 # list all saved layouts
+tx rm backend            # delete a save
+```
+
 ### Smart `tx` (no args)
 
 - No sessions → creates one called "main"
 - One session → attaches to it
 - Multiple sessions → lists them
-- Inside tmux → shows status
+- Inside tmux → shows status with pane details
 
 ## Requirements
 

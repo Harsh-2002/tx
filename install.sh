@@ -9,8 +9,7 @@ info() { printf '  \033[1;32m✓\033[0m %s\n' "$1"; }
 warn() { printf '  \033[1;33m!\033[0m %s\n' "$1"; }
 fail() { printf '  \033[1;31m✗\033[0m %s\n' "$1" >&2; exit 1; }
 
-# --- Pick a download tool ---
-
+# Pick a download tool
 fetch() {
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL "$1"
@@ -21,8 +20,7 @@ fetch() {
     fi
 }
 
-# --- Install dir ---
-
+# Install directory
 if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
     BIN="/usr/local/bin"
 else
@@ -34,14 +32,12 @@ echo ""
 echo "Installing tx..."
 echo ""
 
-# --- Download and install tx ---
-
+# Download and install tx
 fetch "${RAW}/tx" > "${BIN}/tx"
 chmod +x "${BIN}/tx"
 info "Installed tx to ${BIN}/tx"
 
-# --- Ensure BIN is in PATH ---
-
+# Ensure BIN is in PATH
 add_to_path() {
     _line="export PATH=\"${BIN}:\$PATH\""
     for _rc in "$@"; do
@@ -50,7 +46,6 @@ add_to_path() {
             *"$BIN"*) return 0 ;;
         esac
     done
-    # Add to the first rc file that exists (or create it)
     _target="$1"
     {
         echo ""
@@ -75,8 +70,7 @@ case ":$PATH:" in
         ;;
 esac
 
-# --- Shell completions ---
-
+# Shell completions
 _shell="$(basename "${SHELL:-/bin/sh}")"
 
 case "$_shell" in
@@ -91,6 +85,14 @@ _tx_sessions() {
     local sessions
     sessions=(${(f)"$(tmux list-sessions -F '#S' 2>/dev/null)"})
     _describe 'session' sessions
+}
+
+_tx_saves() {
+    local saves_dir="$HOME/.config/tx/saves"
+    [ -d "$saves_dir" ] || return
+    local -a saved
+    saved=($(ls "$saves_dir" 2>/dev/null))
+    _describe 'saved layout' saved
 }
 
 _tx() {
@@ -111,6 +113,10 @@ _tx() {
         'full:Toggle fullscreen pane'
         'send:Send command to pane N'
         'layout:Create N panes with layout'
+        'save:Save current layout'
+        'load:Load a saved layout'
+        'saves:List saved layouts'
+        'rm:Remove a saved layout'
         'win:Create new window'
         'wins:List windows'
         'next:Next window'
@@ -132,6 +138,9 @@ _tx() {
                 a|attach|kill)
                     _tx_sessions
                     ;;
+                load|rm)
+                    _tx_saves
+                    ;;
                 resize)
                     local -a directions
                     directions=('left' 'right' 'up' 'down')
@@ -139,7 +148,7 @@ _tx() {
                     ;;
                 help)
                     local -a help_cmds
-                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'layout' 'win' 'wins' 'next' 'prev' 'rename')
+                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'layout' 'save' 'load' 'saves' 'rm' 'win' 'wins' 'next' 'prev' 'rename')
                     _describe 'command' help_cmds
                     ;;
                 layout)
@@ -184,7 +193,7 @@ _tx_completions() {
     local cur prev commands
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="new ls a attach detach kill split vsplit pane close resize swap full send layout win wins next prev rename help"
+    commands="new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename help"
 
     case "$prev" in
         tx)
@@ -194,6 +203,14 @@ _tx_completions() {
             local sessions
             sessions=$(tmux list-sessions -F '#S' 2>/dev/null)
             COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
+            return ;;
+        load|rm)
+            local saves_dir="$HOME/.config/tx/saves"
+            if [ -d "$saves_dir" ]; then
+                local saves
+                saves=$(ls "$saves_dir" 2>/dev/null)
+                COMPREPLY=($(compgen -W "$saves" -- "$cur"))
+            fi
             return ;;
         resize)
             COMPREPLY=($(compgen -W "left right up down" -- "$cur"))
@@ -247,6 +264,10 @@ complete -c tx -n '__fish_use_subcommand' -a 'swap' -d 'Swap current pane with p
 complete -c tx -n '__fish_use_subcommand' -a 'full' -d 'Toggle fullscreen pane'
 complete -c tx -n '__fish_use_subcommand' -a 'send' -d 'Send command to pane N'
 complete -c tx -n '__fish_use_subcommand' -a 'layout' -d 'Create N panes with layout'
+complete -c tx -n '__fish_use_subcommand' -a 'save' -d 'Save current layout'
+complete -c tx -n '__fish_use_subcommand' -a 'load' -d 'Load a saved layout'
+complete -c tx -n '__fish_use_subcommand' -a 'saves' -d 'List saved layouts'
+complete -c tx -n '__fish_use_subcommand' -a 'rm' -d 'Remove a saved layout'
 complete -c tx -n '__fish_use_subcommand' -a 'win' -d 'Create new window'
 complete -c tx -n '__fish_use_subcommand' -a 'wins' -d 'List windows'
 complete -c tx -n '__fish_use_subcommand' -a 'next' -d 'Next window'
@@ -254,22 +275,21 @@ complete -c tx -n '__fish_use_subcommand' -a 'prev' -d 'Previous window'
 complete -c tx -n '__fish_use_subcommand' -a 'rename' -d 'Rename current window'
 complete -c tx -n '__fish_use_subcommand' -a 'help' -d 'Show help'
 complete -c tx -n '__fish_seen_subcommand_from a attach kill' -a '(tmux list-sessions -F "#S" 2>/dev/null)'
+complete -c tx -n '__fish_seen_subcommand_from load rm' -a '(ls ~/.config/tx/saves/ 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from resize' -a 'left right up down'
 complete -c tx -n '__fish_seen_subcommand_from layout' -a '-v grid'
-complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send layout win wins next prev rename'
+complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename'
 FISH_COMP
         info "Fish completions installed"
         ;;
 esac
 
-# --- Reload shell config ---
-
+# Reload shell config
 echo ""
 
 _shell="$(basename "${SHELL:-/bin/sh}")"
 case "$_shell" in
     zsh)
-        # Clear zsh completion cache so new completions are picked up
         rm -f "$HOME/.zcompdump" 2>/dev/null
         info "Cleared completion cache (will rebuild on next shell)"
         ;;
