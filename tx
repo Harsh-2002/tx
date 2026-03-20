@@ -5,7 +5,7 @@
 
 set -e
 
-TX_VERSION="0.5.0"
+TX_VERSION="0.6.0"
 TX_SAVE_DIR="${TX_SAVE_DIR:-$HOME/.config/tx/saves}"
 
 # Color setup — auto-detects terminal support, no colors when piped
@@ -215,7 +215,21 @@ cmd_resize() {
         right) tmux resize-pane -R "$_amount" ;;
         up)    tmux resize-pane -U "$_amount" ;;
         down)  tmux resize-pane -D "$_amount" ;;
-        even)  tmux select-layout tiled ;;
+        even)
+            # Detect layout direction from pane positions
+            _tops=$(tmux list-panes -F '#{pane_top}' | sort -u | wc -l | tr -d ' ')
+            _lefts=$(tmux list-panes -F '#{pane_left}' | sort -u | wc -l | tr -d ' ')
+            if [ "$_tops" -eq 1 ]; then
+                # All panes on same row → side by side
+                tmux select-layout even-horizontal
+            elif [ "$_lefts" -eq 1 ]; then
+                # All panes in same column → stacked
+                tmux select-layout even-vertical
+            else
+                # Mixed arrangement → tiled
+                tmux select-layout tiled
+            fi
+            ;;
         *)     die "usage: tx resize <left|right|up|down|even> [amount]" ;;
     esac
 }
