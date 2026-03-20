@@ -5,7 +5,7 @@
 
 set -e
 
-TX_VERSION="0.3.0"
+TX_VERSION="0.4.0"
 TX_SAVE_DIR="${TX_SAVE_DIR:-$HOME/.config/tx/saves}"
 
 # Color setup — auto-detects terminal support, no colors when piped
@@ -37,7 +37,18 @@ in_tmux() {
 }
 
 auto_name() {
-    echo "tx-$(date +%s | tail -c 5)"
+    # Use current directory name, sanitized for tmux
+    _dir=$(basename "$PWD" 2>/dev/null)
+    # Remove characters tmux doesn't like in session names
+    _dir=$(echo "$_dir" | tr -d '.:')
+    # Fallback chain: dir name → "main" → timestamp
+    if [ -n "$_dir" ] && ! tmux has-session -t "$_dir" 2>/dev/null; then
+        echo "$_dir"
+    elif ! tmux has-session -t "main" 2>/dev/null; then
+        echo "main"
+    else
+        echo "tx-$(date +%s | tail -c 5)"
+    fi
 }
 
 # Convert 1-indexed pane number to tmux's 0-indexed
@@ -77,7 +88,7 @@ cmd_default() {
     else
         _count=$(tmux list-sessions 2>/dev/null | wc -l | tr -d ' ')
         if [ "$_count" -eq 0 ] 2>/dev/null; then
-            tmux new-session -s main
+            tmux new-session -s "$(auto_name)"
         elif [ "$_count" -eq 1 ]; then
             _name=$(tmux list-sessions -F '#S')
             tmux attach-session -t "$_name"
