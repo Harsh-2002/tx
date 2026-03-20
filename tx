@@ -216,7 +216,9 @@ cmd_full() {
 
 # Send a shell command to pane N (1-indexed)
 cmd_send() {
-    [ -n "$1" ] && [ -n "$2" ] || die "usage: tx send <pane-number> '<command>'"
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        die "usage: tx send <pane-number> '<command>'"
+    fi
     _idx=$(pane_index "$1")
     shift
     _cmd="$*"
