@@ -171,7 +171,7 @@ assert_ok "tx --help exits 0" "$TX" --help
 assert_output_contains "tx -h same as tx help (has SESSIONS)" "SESSIONS" "$TX" -h
 
 # Detailed help for every command
-for cmd in new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename; do
+for cmd in new ls a attach detach kill split vsplit pane close resize swap full send send-all layout save load saves rm win wins next prev rename config; do
     assert_ok "tx help $cmd exits 0" "$TX" help "$cmd"
 done
 

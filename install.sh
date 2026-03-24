@@ -112,6 +112,7 @@ _tx() {
         'swap:Swap current pane with pane N'
         'full:Toggle fullscreen pane'
         'send:Send command to pane N'
+        'send-all:Broadcast command to all panes'
         'layout:Create N panes with layout'
         'save:Save current layout'
         'load:Load a saved layout'
@@ -125,6 +126,7 @@ _tx() {
         'help:Show help'
         'update:Update tx to latest version'
         'version:Show version'
+        'config:Write sane tmux defaults'
     )
 
     _arguments -C \
@@ -150,7 +152,7 @@ _tx() {
                     ;;
                 help)
                     local -a help_cmds
-                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'layout' 'save' 'load' 'saves' 'rm' 'win' 'wins' 'next' 'prev' 'rename' 'update')
+                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'send-all' 'layout' 'save' 'load' 'saves' 'rm' 'win' 'wins' 'next' 'prev' 'rename' 'update' 'config')
                     _describe 'command' help_cmds
                     ;;
                 layout)
@@ -195,7 +197,7 @@ _tx_completions() {
     local cur prev commands
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename help update version"
+    commands="new ls a attach detach kill split vsplit pane close resize swap full send send-all layout save load saves rm win wins next prev rename help update version config"
 
     case "$prev" in
         tx)
@@ -265,6 +267,7 @@ complete -c tx -n '__fish_use_subcommand' -a 'resize' -d 'Resize current pane'
 complete -c tx -n '__fish_use_subcommand' -a 'swap' -d 'Swap current pane with pane N'
 complete -c tx -n '__fish_use_subcommand' -a 'full' -d 'Toggle fullscreen pane'
 complete -c tx -n '__fish_use_subcommand' -a 'send' -d 'Send command to pane N'
+complete -c tx -n '__fish_use_subcommand' -a 'send-all' -d 'Broadcast command to all panes'
 complete -c tx -n '__fish_use_subcommand' -a 'layout' -d 'Create N panes with layout'
 complete -c tx -n '__fish_use_subcommand' -a 'save' -d 'Save current layout'
 complete -c tx -n '__fish_use_subcommand' -a 'load' -d 'Load a saved layout'
@@ -278,11 +281,12 @@ complete -c tx -n '__fish_use_subcommand' -a 'rename' -d 'Rename current window'
 complete -c tx -n '__fish_use_subcommand' -a 'help' -d 'Show help'
 complete -c tx -n '__fish_use_subcommand' -a 'update' -d 'Update tx to latest version'
 complete -c tx -n '__fish_use_subcommand' -a 'version' -d 'Show version'
+complete -c tx -n '__fish_use_subcommand' -a 'config' -d 'Write sane tmux defaults'
 complete -c tx -n '__fish_seen_subcommand_from a attach kill' -a '(tmux list-sessions -F "#S" 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from load rm' -a '(ls ~/.config/tx/saves/ 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from resize' -a 'left right up down even'
 complete -c tx -n '__fish_seen_subcommand_from layout' -a '-v grid'
-complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send layout save load saves rm win wins next prev rename update'
+complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send send-all layout save load saves rm win wins next prev rename update config'
 FISH_COMP
         info "Fish completions installed"
         ;;
