@@ -98,11 +98,14 @@ cmd_default() {
         done
     else
         _count=$(tmux list-sessions 2>/dev/null | wc -l | tr -d ' ')
-        if [ "$_count" -eq 0 ] 2>/dev/null; then
+        _dir_name=$(basename "$PWD" | tr -d '.:')
+
+        if [ "$_count" -eq 0 ]; then
             tmux new-session -s "$(auto_name)"
+        elif [ -n "$_dir_name" ] && tmux has-session -t "$_dir_name" 2>/dev/null; then
+            tmux attach-session -t "$_dir_name"
         elif [ "$_count" -eq 1 ]; then
-            _name=$(tmux list-sessions -F '#S')
-            tmux attach-session -t "$_name"
+            tmux new-session -s "$(auto_name)"
         else
             printf '%sSessions:%s\n' "$BOLD" "$RESET"
             tmux list-sessions -F '#S|#{session_windows}' | while IFS='|' read -r _s _w; do
