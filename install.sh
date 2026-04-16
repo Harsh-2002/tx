@@ -1,5 +1,6 @@
 #!/bin/sh
 # tx installer — one command, ready to go
+# shellcheck disable=SC1091
 set -e
 
 REPO="Harsh-2002/tx"
