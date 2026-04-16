@@ -8,7 +8,7 @@ A dead-simple tmux wrapper. No keybindings to memorize — just type what you me
 curl -fsSL https://raw.githubusercontent.com/Harsh-2002/tx/main/install.sh | sh
 ```
 
-That's it. Downloads `tx`, puts it in your PATH, sets up tab completions, done.
+That's it. Downloads `tx`, puts it in your PATH, creates `~/.tmux.conf` with sane defaults, sets up tab completions, done.
 
 ## Usage
 
