@@ -37,6 +37,22 @@ fetch "${RAW}/tx" > "${BIN}/tx"
 chmod +x "${BIN}/tx"
 info "Installed tx to ${BIN}/tx"
 
+# Create default tmux config if it doesn't exist
+_conf="$HOME/.tmux.conf"
+if [ ! -f "$_conf" ]; then
+    cat > "$_conf" <<'TMUX_CONF'
+# tx — sane tmux defaults
+set -g mouse on
+set -g history-limit 50000
+set -sg escape-time 0
+set -g renumber-windows on
+set -g default-terminal "screen-256color"
+TMUX_CONF
+    info "Created ~/.tmux.conf with sane defaults"
+else
+    warn "$HOME/.tmux.conf already exists — skipped"
+fi
+
 # Ensure BIN is in PATH
 add_to_path() {
     _line="export PATH=\"${BIN}:\$PATH\""
@@ -126,7 +142,6 @@ _tx() {
         'help:Show help'
         'update:Update tx to latest version'
         'version:Show version'
-        'config:Write sane tmux defaults'
     )
 
     _arguments -C \
@@ -152,7 +167,7 @@ _tx() {
                     ;;
                 help)
                     local -a help_cmds
-                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'send-all' 'layout' 'save' 'load' 'saves' 'rm' 'win' 'wins' 'next' 'prev' 'rename' 'update' 'config')
+                    help_cmds=('new' 'ls' 'a' 'attach' 'detach' 'kill' 'split' 'vsplit' 'pane' 'close' 'resize' 'swap' 'full' 'send' 'send-all' 'layout' 'save' 'load' 'saves' 'rm' 'win' 'wins' 'next' 'prev' 'rename' 'update')
                     _describe 'command' help_cmds
                     ;;
                 layout)
@@ -197,7 +212,7 @@ _tx_completions() {
     local cur prev commands
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="new ls a attach detach kill split vsplit pane close resize swap full send send-all layout save load saves rm win wins next prev rename help update version config"
+    commands="new ls a attach detach kill split vsplit pane close resize swap full send send-all layout save load saves rm win wins next prev rename help update version"
 
     case "$prev" in
         tx)
@@ -281,12 +296,11 @@ complete -c tx -n '__fish_use_subcommand' -a 'rename' -d 'Rename current window'
 complete -c tx -n '__fish_use_subcommand' -a 'help' -d 'Show help'
 complete -c tx -n '__fish_use_subcommand' -a 'update' -d 'Update tx to latest version'
 complete -c tx -n '__fish_use_subcommand' -a 'version' -d 'Show version'
-complete -c tx -n '__fish_use_subcommand' -a 'config' -d 'Write sane tmux defaults'
 complete -c tx -n '__fish_seen_subcommand_from a attach kill' -a '(tmux list-sessions -F "#S" 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from load rm' -a '(ls ~/.config/tx/saves/ 2>/dev/null)'
 complete -c tx -n '__fish_seen_subcommand_from resize' -a 'left right up down even'
 complete -c tx -n '__fish_seen_subcommand_from layout' -a '-v grid'
-complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send send-all layout save load saves rm win wins next prev rename update config'
+complete -c tx -n '__fish_seen_subcommand_from help' -a 'new ls a attach detach kill split vsplit pane close resize swap full send send-all layout save load saves rm win wins next prev rename update'
 FISH_COMP
         info "Fish completions installed"
         ;;
