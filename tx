@@ -169,7 +169,13 @@ cmd_detach() {
 # Kill a session by name, or the current one if inside tmux
 cmd_kill() {
     if [ -n "$1" ]; then
-        tmux kill-session -t "$1" 2>/dev/null || die "session '$1' not found"
+        for _name in "$@"; do
+            if tmux kill-session -t "$_name" 2>/dev/null; then
+                printf '  %s✓%s Killed %s%s%s\n' "$GREEN" "$RESET" "$BOLD" "$_name" "$RESET"
+            else
+                die "session '$_name' not found"
+            fi
+        done
     else
         if in_tmux; then
             tmux kill-session
