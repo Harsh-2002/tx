@@ -313,18 +313,21 @@ _shell="$(basename "${SHELL:-/bin/sh}")"
 case "$_shell" in
     zsh)
         rm -f "$HOME/.zcompdump" 2>/dev/null
-        info "Cleared completion cache (will rebuild on next shell)"
+        if [ -f "$HOME/.zshrc" ]; then
+            . "$HOME/.zshrc" 2>/dev/null && info "Reloaded ~/.zshrc"
+        fi
+        ;;
+    bash)
+        if [ -f "$HOME/.bashrc" ]; then
+            . "$HOME/.bashrc" 2>/dev/null && info "Reloaded ~/.bashrc"
+        fi
+        ;;
+    fish)
+        if [ -f "$HOME/.config/fish/config.fish" ]; then
+            . "$HOME/.config/fish/config.fish" 2>/dev/null && info "Reloaded config.fish"
+        fi
         ;;
 esac
 
 echo ""
-echo "Done! Start a new shell or run:"
-echo ""
-case "$_shell" in
-    zsh)  echo "  source ~/.zshrc" ;;
-    bash) echo "  source ~/.bashrc" ;;
-    fish) echo "  source ~/.config/fish/config.fish" ;;
-    *)    echo "  source ~/.profile" ;;
-esac
-echo ""
-echo "Then type 'tx help' to get started."
+echo "Done! tx is ready. Type 'tx help' to get started."
