@@ -526,11 +526,13 @@ cmd_saves() {
 
 # Remove a saved layout
 cmd_rm() {
-    [ -n "$1" ] || die "usage: tx rm <name>"
-    _file="${TX_SAVE_DIR}/${1}"
-    [ -f "$_file" ] || die "save '${1}' not found"
-    rm "$_file"
-    printf '  %s✓%s Removed %s%s%s\n' "$GREEN" "$RESET" "$BOLD" "$1" "$RESET"
+    [ -n "$1" ] || die "usage: tx rm <name> [<name>...]"
+    for _name in "$@"; do
+        _file="${TX_SAVE_DIR}/${_name}"
+        [ -f "$_file" ] || die "save '${_name}' not found"
+        rm "$_file"
+        printf '  %s✓%s Removed %s%s%s\n' "$GREEN" "$RESET" "$BOLD" "$_name" "$RESET"
+    done
 }
 
 # Window commands
@@ -539,7 +541,9 @@ cmd_rm() {
 cmd_win() {
     in_tmux || die "not in tmux — start a session first: tx new"
     if [ -n "$1" ]; then
-        tmux new-window -n "$1"
+        for _name in "$@"; do
+            tmux new-window -n "$_name"
+        done
     else
         tmux new-window
     fi
