@@ -5,7 +5,7 @@
 
 set -e
 
-TX_VERSION="0.7.0"
+TX_VERSION="0.0.5"
 TX_SAVE_DIR="${TX_SAVE_DIR:-$HOME/.config/tx/saves}"
 
 # Color setup — auto-detects terminal support, no colors when piped
